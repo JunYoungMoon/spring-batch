@@ -6,7 +6,9 @@ import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Iterator;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
@@ -18,14 +20,19 @@ public class AdvertiserSpecificDataReader implements ItemReader<CustomerData> {
 
     private final CustomerDataRepository customerDataRepository;
     private final String advertiserId;
+    private final String processingMonth;
     
     private Iterator<CustomerData> dataIterator;
     private boolean initialized = false;
+    
+    private static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
 
     public AdvertiserSpecificDataReader(CustomerDataRepository customerDataRepository,
-                                      @Value("#{jobParameters['advertiserId']}") String advertiserId) {
+                                      @Value("#{jobParameters['advertiserId']}") String advertiserId,
+                                      @Value("#{jobParameters['processingMonth']}") String processingMonth) {
         this.customerDataRepository = customerDataRepository;
         this.advertiserId = advertiserId != null ? advertiserId : "DEFAULT";
+        this.processingMonth = processingMonth != null ? processingMonth : LocalDate.now().format(MONTH_FORMATTER);
     }
 
     @Override
@@ -47,20 +54,28 @@ public class AdvertiserSpecificDataReader implements ItemReader<CustomerData> {
     }
 
     private void initializeAdvertiserData() {
-        log.info("Initializing data reader for advertiser: {}", advertiserId);
+        log.info("[{}] 데이터 리더 초기화 시작 - 처리 월: {}", advertiserId, processingMonth);
         
-        // Get unprocessed data from the last 24 hours for this advertiser's criteria
-        LocalDateTime cutoffTime = LocalDateTime.now().minusDays(1);
-        List<CustomerData> unprocessedData = customerDataRepository.findUnprocessedDataSince(cutoffTime);
+        // 처리할 월의 시작일과 종료일 계산
+        LocalDate monthStart = LocalDate.parse(processingMonth + "-01");
+        LocalDate monthEnd = monthStart.plusMonths(1).minusDays(1);
         
-        // Filter data based on advertiser-specific criteria
-        List<CustomerData> advertiserData = filterDataForAdvertiser(unprocessedData);
+        LocalDateTime startDateTime = monthStart.atStartOfDay();
+        LocalDateTime endDateTime = monthEnd.atTime(23, 59, 59);
+        
+        log.info("[{}] 처리 기간: {} ~ {}", advertiserId, startDateTime, endDateTime);
+        
+        // 해당 월의 미처리 데이터 조회
+        List<CustomerData> monthlyData = customerDataRepository.findUnprocessedDataBetween(startDateTime, endDateTime);
+        
+        // 광고주별 필터링 적용
+        List<CustomerData> advertiserData = filterDataForAdvertiser(monthlyData);
         
         if (!advertiserData.isEmpty()) {
             dataIterator = advertiserData.iterator();
-            log.info("Found {} records to process for advertiser: {}", advertiserData.size(), advertiserId);
+            log.info("[{}] 처리할 레코드 {}개 발견 - 월: {}", advertiserId, advertiserData.size(), processingMonth);
         } else {
-            log.info("No data found to process for advertiser: {}", advertiserId);
+            log.info("[{}] 처리할 데이터가 없습니다 - 월: {}", advertiserId, processingMonth);
         }
     }
     

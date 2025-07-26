@@ -35,4 +35,11 @@ public interface CustomerDataRepository extends JpaRepository<CustomerData, Long
     List<CustomerData> findByChannelAndDateRange(@Param("channel") String channel,
                                                @Param("startDate") LocalDateTime startDate,
                                                @Param("endDate") LocalDateTime endDate);
+    
+    // 병렬 처리를 위한 새로운 메서드들
+    @Query("SELECT cd FROM CustomerData cd WHERE cd.processedForAi = false " +
+           "AND cd.eventTimestamp BETWEEN :startDate AND :endDate " +
+           "ORDER BY cd.eventTimestamp ASC")
+    List<CustomerData> findUnprocessedDataBetween(@Param("startDate") LocalDateTime startDate,
+                                                  @Param("endDate") LocalDateTime endDate);
 }

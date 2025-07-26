@@ -28,4 +28,13 @@ public interface AdvertiserRepository extends JpaRepository<Advertiser, Long> {
     
     @Query("SELECT a FROM Advertiser a WHERE a.failureCount >= a.maxFailures")
     List<Advertiser> findFailedAdvertisers();
+    
+    // 병렬 처리를 위한 새로운 메서드들
+    List<Advertiser> findByStatusAndBatchEnabled(Advertiser.AdvertiserStatus status, Boolean batchEnabled);
+    
+    @Query("SELECT a FROM Advertiser a WHERE a.advertiserType = 'NEW' AND a.backfillCompleted = false")
+    List<Advertiser> findNewAdvertisersNeedingBackfill();
+    
+    @Query("SELECT a FROM Advertiser a WHERE a.advertiserType = 'EXISTING'")
+    List<Advertiser> findExistingAdvertisers();
 }
